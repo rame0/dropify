@@ -992,8 +992,7 @@ h1 {
     height: 3px;
     background-color: #444;
     left: 50%;
-    -webkit-transform: translateX(-50%);
-            transform: translateX(-50%);
+    transform: translateX(-50%);
     bottom: 0; }
 
 h2 {
@@ -1060,7 +1059,6 @@ p.help {
   padding: 6px 10px;
   border-radius: 4px;
   margin-left: 10px;
-  -webkit-transition: background 0.1s linear;
   transition: background 0.1s linear; }
   #toggleDropify:hover {
     background: #EEE; }

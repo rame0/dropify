@@ -48,8 +48,8 @@ function Dropify(element, options) {
         messages: {
             'default': 'Drag and drop a file here or click',
             'replace': 'Drag and drop or click to replace',
-            'remove':  'Remove',
-            'error':   'Ooops, something wrong happended.'
+            'remove': 'Remove',
+            'error': 'Ops, something wrong happened.'
         },
         error: {
             'fileSize': 'The file size is too big ({{ value }} max).',
@@ -61,27 +61,29 @@ function Dropify(element, options) {
             'fileExtension': 'The file is not allowed ({{ value }} only).'
         },
         tpl: {
-            wrap:            '<div class="dropify-wrapper"></div>',
-            loader:          '<div class="dropify-loader"></div>',
-            message:         '<div class="dropify-message"><span class="file-icon" /> <p>{{ default }}</p></div>',
-            preview:         '<div class="dropify-preview"><span class="dropify-render"></span><div class="dropify-infos"><div class="dropify-infos-inner"><p class="dropify-infos-message">{{ replace }}</p></div></div></div>',
-            filename:        '<p class="dropify-filename"><span class="dropify-filename-inner"></span></p>',
-            clearButton:     '<button type="button" class="dropify-clear">{{ remove }}</button>',
-            errorLine:       '<p class="dropify-error">{{ error }}</p>',
+            wrap: '<div class="dropify-wrapper"></div>',
+            loader: '<div class="dropify-loader"></div>',
+            message: '<div class="dropify-message"><span class="file-icon" /> <p>{{ default }}</p></div>',
+            preview: '<div class="dropify-preview"><span class="dropify-render"></span><div class="dropify-infos"><div class="dropify-infos-inner"><p class="dropify-infos-message">{{ replace }}</p></div></div></div>',
+            filename: '<p class="dropify-filename"><span class="dropify-filename-inner"></span></p>',
+            clearButton: '<button type="button" class="dropify-clear">{{ remove }}</button>',
+            errorLine: '<p class="dropify-error">{{ error }}</p>',
             errorsContainer: '<div class="dropify-errors-container"><ul></ul></div>'
         }
     };
 
-    this.element            = element;
-    this.input              = $(this.element);
-    this.wrapper            = null;
-    this.preview            = null;
-    this.filenameWrapper    = null;
-    this.settings           = $.extend(true, defaults, options, this.input.data());
-    this.errorsEvent        = $.Event('dropify.errors');
-    this.isDisabled         = false;
-    this.isInit             = false;
-    this.file               = {
+    this.element = element;
+    this.input = $(this.element);
+    this.wrapper = null;
+    this.preview = null;
+    this.filenameWrapper = null;
+    this.settings = $.extend(true, defaults, options, this.input.data());
+    this.errorsEvent = $.Event('dropify.errors');
+    this.fileChangedEvent = $.Event('dropify.fileChanged');
+    this.fileClearedEvent = $.Event('dropify.fileCleared');
+    this.isDisabled = false;
+    this.isInit = false;
+    this.file = {
         object: null,
         name: null,
         size: null,
@@ -98,9 +100,9 @@ function Dropify(element, options) {
         this.settings.allowedFileExtensions = this.settings.allowedFileExtensions.split(' ');
     }
 
-    this.onChange     = this.onChange.bind(this);
+    this.onChange = this.onChange.bind(this);
     this.clearElement = this.clearElement.bind(this);
-    this.onFileReady  = this.onFileReady.bind(this);
+    this.onFileReady = this.onFileReady.bind(this);
 
     this.translateMessages();
     this.createElements();
@@ -114,17 +116,21 @@ function Dropify(element, options) {
 /**
  * On change event
  */
-Dropify.prototype.onChange = function()
-{
+Dropify.prototype.onChange = function () {
     this.resetPreview();
     this.readFile(this.element);
+
+    if(this.input.val() === '') {
+        this.input.trigger(this.fileClearedEvent, [this]);
+    }else{
+        this.input.trigger(this.fileChangedEvent, [this]);
+    }
 };
 
 /**
  * Create dom elements
  */
-Dropify.prototype.createElements = function()
-{
+Dropify.prototype.createElements = function () {
     this.isInit = true;
     this.input.wrap($(this.settings.tpl.wrap));
     this.wrapper = this.input.parent();
@@ -181,30 +187,29 @@ Dropify.prototype.createElements = function()
  *
  * @param  {Object} input
  */
-Dropify.prototype.readFile = function(input)
-{
+Dropify.prototype.readFile = function (input) {
     if (input.files && input.files[0]) {
-        var reader         = new FileReader();
-        var image          = new Image();
-        var file           = input.files[0];
-        var srcBase64      = null;
-        var _this          = this;
-        var eventFileReady = $.Event("dropify.fileReady");
+        var reader = new FileReader(),
+        image = new Image(),
+        file = input.files[0],
+        srcBase64 = null,
+        _this = this,
+        eventFileReady = $.Event("dropify.fileReady");
 
         this.clearErrors();
         this.showLoader();
         this.setFileInformations(file);
         this.errorsEvent.errors = [];
         this.checkFileSize();
-		this.isFileExtensionAllowed();
+        this.isFileExtensionAllowed();
 
         if (this.isImage() && this.file.size < this.sizeToByte(this.settings.maxFileSizePreview)) {
             this.input.on('dropify.fileReady', this.onFileReady);
             reader.readAsDataURL(file);
-            reader.onload = function(_file) {
+            reader.onload = function (_file) {
                 srcBase64 = _file.target.result;
                 image.src = _file.target.result;
-                image.onload = function() {
+                image.onload = function () {
                     _this.setFileDimensions(this.width, this.height);
                     _this.validateImage();
                     _this.input.trigger(eventFileReady, [true, srcBase64]);
@@ -224,14 +229,13 @@ Dropify.prototype.readFile = function(input)
  * @param  {Bool} previewable
  * @param  {String} src
  */
-Dropify.prototype.onFileReady = function(event, previewable, src)
-{
+Dropify.prototype.onFileReady = function (event, previewable, src) {
     this.input.off('dropify.fileReady', this.onFileReady);
 
     if (this.errorsEvent.errors.length === 0) {
         this.setPreview(previewable, src);
     } else {
-        this.input.trigger(this.errorsEvent, [this]);
+        this.input.trigger(this.errorsEvent, [this]);
         for (var i = this.errorsEvent.errors.length - 1; i >= 0; i--) {
             var errorNamespace = this.errorsEvent.errors[i].namespace;
             var errorKey = errorNamespace.split('.').pop();
@@ -242,7 +246,9 @@ Dropify.prototype.onFileReady = function(event, previewable, src)
             this.errorsContainer.addClass('visible');
 
             var errorsContainer = this.errorsContainer;
-            setTimeout(function(){ errorsContainer.removeClass('visible'); }, this.settings.errorTimeout);
+            setTimeout(function () {
+                errorsContainer.removeClass('visible');
+            }, this.settings.errorTimeout);
         }
 
         this.wrapper.addClass('has-error');
@@ -252,17 +258,16 @@ Dropify.prototype.onFileReady = function(event, previewable, src)
 };
 
 /**
- * Set file informations
+ * Set file information
  *
  * @param {File} file
  */
-Dropify.prototype.setFileInformations = function(file)
-{
+Dropify.prototype.setFileInformations = function (file) {
     this.file.object = file;
-    this.file.name   = file.name;
-    this.file.size   = file.size;
-    this.file.type   = file.type;
-    this.file.width  = null;
+    this.file.name = file.name;
+    this.file.size = file.size;
+    this.file.type = file.type;
+    this.file.width = null;
     this.file.height = null;
 };
 
@@ -272,9 +277,8 @@ Dropify.prototype.setFileInformations = function(file)
  * @param {Int} width
  * @param {Int} height
  */
-Dropify.prototype.setFileDimensions = function(width, height)
-{
-    this.file.width  = width;
+Dropify.prototype.setFileDimensions = function (width, height) {
+    this.file.width = width;
     this.file.height = height;
 };
 
@@ -283,8 +287,7 @@ Dropify.prototype.setFileDimensions = function(width, height)
  *
  * @param {String} src
  */
-Dropify.prototype.setPreview = function(previewable, src)
-{
+Dropify.prototype.setPreview = function (previewable, src) {
     this.wrapper.removeClass('has-error').addClass('has-preview');
     this.filenameWrapper.children('.dropify-filename-inner').html(this.file.name);
     var render = this.preview.children('.dropify-render');
@@ -309,8 +312,7 @@ Dropify.prototype.setPreview = function(previewable, src)
 /**
  * Reset the preview
  */
-Dropify.prototype.resetPreview = function()
-{
+Dropify.prototype.resetPreview = function () {
     this.wrapper.removeClass('has-preview');
     var render = this.preview.children('.dropify-render');
     render.find('.dropify-extension').remove();
@@ -327,8 +329,7 @@ Dropify.prototype.resetPreview = function()
  *
  * @return {String} filename
  */
-Dropify.prototype.cleanFilename = function(src)
-{
+Dropify.prototype.cleanFilename = function (src) {
     var filename = src.split('\\').pop();
     if (filename == src) {
         filename = src.split('/').pop();
@@ -340,44 +341,42 @@ Dropify.prototype.cleanFilename = function(src)
 /**
  * Clear the element, events are available
  */
-Dropify.prototype.clearElement = function()
-{
+Dropify.prototype.clearElement = function () {
     if (this.errorsEvent.errors.length === 0) {
         var eventBefore = $.Event("dropify.beforeClear");
-        this.input.trigger(eventBefore, [this]);
+        this.input.trigger(eventBefore, [this]);
 
         if (eventBefore.result !== false) {
             this.resetFile();
             this.input.val('');
             this.resetPreview();
 
-            this.input.trigger($.Event("dropify.afterClear"), [this]);
+            this.input.trigger($.Event("dropify.afterClear"), [this]);
         }
     } else {
         this.resetFile();
         this.input.val('');
         this.resetPreview();
     }
+    this.input.trigger(this.fileClearedEvent, [this]);
 };
 
 /**
  * Reset file informations
  */
-Dropify.prototype.resetFile = function()
-{
+Dropify.prototype.resetFile = function () {
     this.file.object = null;
-    this.file.name   = null;
-    this.file.size   = null;
-    this.file.type   = null;
-    this.file.width  = null;
+    this.file.name = null;
+    this.file.size = null;
+    this.file.type = null;
+    this.file.width = null;
     this.file.height = null;
 };
 
 /**
  * Set the container height
  */
-Dropify.prototype.setContainerSize = function()
-{
+Dropify.prototype.setContainerSize = function () {
     if (this.settings.height) {
         this.wrapper.height(this.settings.height);
     }
@@ -388,11 +387,10 @@ Dropify.prototype.setContainerSize = function()
  *
  * @return {Boolean}
  */
-Dropify.prototype.isTouchDevice = function()
-{
+Dropify.prototype.isTouchDevice = function () {
     return (('ontouchstart' in window) ||
-            (navigator.MaxTouchPoints > 0) ||
-            (navigator.msMaxTouchPoints > 0));
+        (navigator.maxTouchPoints > 0) ||
+        (navigator.msMaxTouchPoints > 0));
 };
 
 /**
@@ -400,8 +398,7 @@ Dropify.prototype.isTouchDevice = function()
  *
  * @return {String}
  */
-Dropify.prototype.getFileType = function()
-{
+Dropify.prototype.getFileType = function () {
     return this.file.name.split('.').pop().toLowerCase();
 };
 
@@ -410,8 +407,7 @@ Dropify.prototype.getFileType = function()
  *
  * @return {Boolean}
  */
-Dropify.prototype.isImage = function()
-{
+Dropify.prototype.isImage = function () {
     if (this.settings.imgFileExtensions.indexOf(this.getFileType()) != "-1") {
         return true;
     }
@@ -420,26 +416,25 @@ Dropify.prototype.isImage = function()
 };
 
 /**
-* Test if the file extension is allowed
-*
-* @return {Boolean}
-*/
+ * Test if the file extension is allowed
+ *
+ * @return {Boolean}
+ */
 Dropify.prototype.isFileExtensionAllowed = function () {
 
-	if (this.settings.allowedFileExtensions.indexOf('*') != "-1" || 
+    if (this.settings.allowedFileExtensions.indexOf('*') != "-1" ||
         this.settings.allowedFileExtensions.indexOf(this.getFileType()) != "-1") {
-		return true;
-	}
-	this.pushError("fileExtension");
+        return true;
+    }
+    this.pushError("fileExtension");
 
-	return false;
+    return false;
 };
 
 /**
  * Translate messages if needed.
  */
-Dropify.prototype.translateMessages = function()
-{
+Dropify.prototype.translateMessages = function () {
     for (var name in this.settings.tpl) {
         for (var key in this.settings.messages) {
             this.settings.tpl[name] = this.settings.tpl[name].replace('{{ ' + key + ' }}', this.settings.messages[key]);
@@ -450,8 +445,7 @@ Dropify.prototype.translateMessages = function()
 /**
  * Check the limit filesize.
  */
-Dropify.prototype.checkFileSize = function()
-{
+Dropify.prototype.checkFileSize = function () {
     if (this.sizeToByte(this.settings.maxFileSize) !== 0 && this.file.size > this.sizeToByte(this.settings.maxFileSize)) {
         this.pushError("fileSize");
     }
@@ -462,15 +456,14 @@ Dropify.prototype.checkFileSize = function()
  *
  * @return {Int} value
  */
-Dropify.prototype.sizeToByte = function(size)
-{
+Dropify.prototype.sizeToByte = function (size) {
     var value = 0;
 
     if (size !== 0) {
-        var unit  = size.slice(-1).toUpperCase(),
-            kb    = 1024,
-            mb    = kb * 1024,
-            gb    = mb * 1024;
+        var unit = size.slice(-1).toUpperCase(),
+            kb = 1024,
+            mb = kb * 1024,
+            gb = mb * 1024;
 
         if (unit === 'K') {
             value = parseFloat(size) * kb;
@@ -487,8 +480,7 @@ Dropify.prototype.sizeToByte = function(size)
 /**
  * Validate image dimensions and format
  */
-Dropify.prototype.validateImage = function()
-{
+Dropify.prototype.validateImage = function () {
     if (this.settings.minWidth !== 0 && this.settings.minWidth >= this.file.width) {
         this.pushError("minWidth");
     }
@@ -515,8 +507,7 @@ Dropify.prototype.validateImage = function()
  *
  * @return {String}
  */
-Dropify.prototype.getImageFormat = function()
-{
+Dropify.prototype.getImageFormat = function () {
     if (this.file.width == this.file.height) {
         return "square";
     }
@@ -531,11 +522,11 @@ Dropify.prototype.getImageFormat = function()
 };
 
 /**
-* Push error
-*
-* @param {String} errorKey
-*/
-Dropify.prototype.pushError = function(errorKey) {
+ * Push error
+ *
+ * @param {String} errorKey
+ */
+Dropify.prototype.pushError = function (errorKey) {
     var e = $.Event("dropify.error." + errorKey);
     this.errorsEvent.errors.push(e);
     this.input.trigger(e, [this]);
@@ -544,8 +535,7 @@ Dropify.prototype.pushError = function(errorKey) {
 /**
  * Clear errors
  */
-Dropify.prototype.clearErrors = function()
-{
+Dropify.prototype.clearErrors = function () {
     if (typeof this.errorsContainer !== "undefined") {
         this.errorsContainer.children('ul').html('');
     }
@@ -556,8 +546,7 @@ Dropify.prototype.clearErrors = function()
  *
  * @param  {String} errorKey
  */
-Dropify.prototype.showError = function(errorKey)
-{
+Dropify.prototype.showError = function (errorKey) {
     if (typeof this.errorsContainer !== "undefined") {
         this.errorsContainer.children('ul').append('<li>' + this.getError(errorKey) + '</li>');
     }
@@ -568,8 +557,7 @@ Dropify.prototype.showError = function(errorKey)
  *
  * @return  {String} message
  */
-Dropify.prototype.getError = function(errorKey)
-{
+Dropify.prototype.getError = function (errorKey) {
     var error = this.settings.error[errorKey],
         value = '';
 
@@ -586,8 +574,8 @@ Dropify.prototype.getError = function(errorKey)
     } else if (errorKey === 'imageFormat') {
         value = this.settings.allowedFormats.join(', ');
     } else if (errorKey === 'fileExtension') {
-		value = this.settings.allowedFileExtensions.join(', ');
-	}
+        value = this.settings.allowedFileExtensions.join(', ');
+    }
 
     if (value !== '') {
         return error.replace('{{ value }}', value);
@@ -599,8 +587,7 @@ Dropify.prototype.getError = function(errorKey)
 /**
  * Show the loader
  */
-Dropify.prototype.showLoader = function()
-{
+Dropify.prototype.showLoader = function () {
     if (typeof this.loader !== "undefined") {
         this.loader.show();
     }
@@ -609,8 +596,7 @@ Dropify.prototype.showLoader = function()
 /**
  * Hide the loader
  */
-Dropify.prototype.hideLoader = function()
-{
+Dropify.prototype.hideLoader = function () {
     if (typeof this.loader !== "undefined") {
         this.loader.hide();
     }
@@ -619,8 +605,7 @@ Dropify.prototype.hideLoader = function()
 /**
  * Destroy dropify
  */
-Dropify.prototype.destroy = function()
-{
+Dropify.prototype.destroy = function () {
     this.input.siblings().remove();
     this.input.unwrap();
     this.isInit = false;
@@ -629,21 +614,19 @@ Dropify.prototype.destroy = function()
 /**
  * Init dropify
  */
-Dropify.prototype.init = function()
-{
+Dropify.prototype.init = function () {
     this.createElements();
 };
 
 /**
  * Test if element is init
  */
-Dropify.prototype.isDropified = function()
-{
+Dropify.prototype.isDropified = function () {
     return this.isInit;
 };
 
-$.fn[pluginName] = function(options) {
-    this.each(function() {
+$.fn[pluginName] = function (options) {
+    this.each(function () {
         if (!$.data(this, pluginName)) {
             $.data(this, pluginName, new Dropify(this, options));
         }
